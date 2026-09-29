@@ -4,7 +4,7 @@
 export const links = {
   email: "rishabh6401@gmail.com",
   linkedin: "https://www.linkedin.com/in/rishabh-kumar-28b6371bb",
-  github: "https://github.com/rishabhdelta4infotech",
+  github: "https://github.com/Rishabhkumar6401",
   resume: "/resume.pdf",
   yourgpt: "https://yourgpt.ai/",
 } as const;
