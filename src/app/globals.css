@@ -177,16 +177,24 @@ h2{font-size:clamp(28px,3.6vw,40px);line-height:1.12;letter-spacing:-.03em;font-
 /* demo (small backend touch) */
 .demo{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:30px;box-shadow:var(--shadow);display:grid;grid-template-columns:1fr 1.15fr;gap:36px;align-items:center}
 @media(max-width:900px){.demo{grid-template-columns:1fr;padding:22px}}
+.demo h2{font-size:clamp(24px,3vw,32px)}
 .demo p{color:var(--muted);font-size:16px;margin-top:10px}
 .demo .why{margin-top:16px;font-size:14.5px;color:var(--muted);border-left:3px solid var(--accent);padding-left:12px}
+.demo-cta{margin-top:22px}
+.demo code{font-family:var(--mono);font-size:.88em;color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:5px;white-space:nowrap}
+.demo-cta .demo-note{margin-top:10px;font-size:13px;color:var(--soft)}
 .race{display:grid;gap:18px}
 .lane small{display:flex;justify-content:space-between;font-size:14px;font-weight:600;margin-bottom:8px}
 .lane small span{font-weight:500;color:var(--soft);font-family:var(--mono);font-size:13px}
 .track{height:14px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
-.fill{height:100%;width:0;border-radius:999px;background:var(--soft)}
+.fill{height:100%;width:0;border-radius:999px;background:var(--soft);transition:width .2s ease-out}
 .fill.fast{background:linear-gradient(90deg,var(--accent),#9f7aea)}
 .result{font-size:15px;min-height:24px;color:var(--text);font-weight:600}
 .result em{font-style:normal;color:var(--accent)}
+.result small{display:block;margin-top:6px;font-size:13px;font-weight:500;color:var(--muted)}
+.result .msg{display:block;font-weight:500;color:var(--muted)}
+.result .hint{display:block;font-size:14px;font-weight:500;color:var(--soft)}
+.result small+.msg{margin-top:8px}
 
 /* education + achievements */
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:20px}
@@ -196,6 +204,9 @@ h2{font-size:clamp(28px,3.6vw,40px);line-height:1.12;letter-spacing:-.03em;font-
 .card h3{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-top:10px}
 .card p{color:var(--muted);margin-top:6px;font-size:15.5px}
 .big-num{font-size:40px;font-weight:800;letter-spacing:-.04em;color:var(--accent);line-height:1;margin-top:12px}
+.wins{list-style:none;margin-top:12px;display:grid;gap:6px}
+.wins li{display:flex;gap:10px;font-size:15px;color:var(--text)}
+.wins li svg{width:16px;height:16px;flex:none;margin-top:4px;color:var(--ok)}
 
 /* contact */
 .contact{display:grid;grid-template-columns:1fr 1.1fr;gap:44px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:44px;box-shadow:var(--shadow);position:relative;overflow:hidden}

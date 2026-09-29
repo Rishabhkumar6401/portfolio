@@ -171,6 +171,13 @@ export const skills = [
   { group: "AI", items: ["OpenAI", "Anthropic", "Gemini", "MCP", "Claude Code", "Cursor"] },
 ] as const;
 
+// The three winning projects behind the "3 of 4 hackathons" stat.
+export const hackathonWins = [
+  "Multi-channel campaign engine",
+  "MCP playground",
+  "Image generation in YourGPT Studio via third-party APIs",
+] as const;
+
 export const education = {
   degree: "B.Tech, Information Technology",
   school: "Ajay Kumar Garg Engineering College (AKTU), Ghaziabad · 2019 — 2023",

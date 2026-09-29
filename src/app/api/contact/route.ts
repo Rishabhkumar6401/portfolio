@@ -1,5 +1,6 @@
+import { contactSchema } from "@/lib/contact";
 import { notifyNewMessage } from "@/lib/notify";
-import { clientIp, contactSchema, hashIp } from "@/lib/contact";
+import { clientIp, hashIp, isCrossSite } from "@/lib/request";
 import { getSupabase } from "@/lib/supabase";
 
 const MAX_BODY_BYTES = 10_000;
@@ -9,9 +10,7 @@ const error = (status: number, message: string) => Response.json({ ok: false, er
 // POST /api/contact — validate → save (rate-limited in the database) → email Rishabh.
 export async function POST(req: Request) {
   // Only accept submissions from this site's own pages.
-  const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) return error(403, "Cross-site submissions are not allowed.");
+  if (isCrossSite(req)) return error(403, "Cross-site submissions are not allowed.");
 
   const raw = await req.text();
   if (raw.length > MAX_BODY_BYTES) return error(413, "That message is too large.");

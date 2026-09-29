@@ -1,10 +1,11 @@
 import ApiCard from "@/components/ApiCard";
+import CacheDemo from "@/components/CacheDemo";
 import ContactForm from "@/components/ContactForm";
 import { ArrowRight, Check, GitHub, LinkedIn, Mail, ProjectIcon } from "@/components/Icons";
 import Nav from "@/components/Nav";
 import QuoteCard from "@/components/QuoteCard";
 import Stats from "@/components/Stats";
-import { education, experience, facts, hero, links, principles, projects, skills } from "@/content/profile";
+import { education, experience, facts, hackathonWins, hero, links, principles, projects, skills } from "@/content/profile";
 
 export default function Home() {
   return (
@@ -43,6 +44,13 @@ export default function Home() {
 
         <Stats />
 
+        {/* ================= LIVE CACHING DEMO ================= */}
+        <section id="demo">
+          <div className="wrap">
+            <CacheDemo />
+          </div>
+        </section>
+
         {/* ================= ABOUT ================= */}
         <section id="about">
           <div className="wrap">
@@ -53,9 +61,9 @@ export default function Home() {
             <div className="about">
               <div className="reveal">
                 <p>
-                  I&apos;m a backend engineer with <b>3+ years of Node.js experience</b>. I started at Gozoom
-                  Technologies building APIs for a B2B e-commerce product, and today I work at <b>Delta4 Infotech</b> on
-                  YourGPT — an AI chatbot platform companies use for customer support and sales.
+                  I&apos;m a Node.js backend engineer. I started at Gozoom Technologies building APIs for a B2B
+                  e-commerce product, and today I work at <b>Delta4 Infotech</b> on YourGPT — an AI chatbot platform
+                  companies use for customer support and sales.
                 </p>
                 <p>
                   Most of my work is the plumbing that keeps a product dependable: a <b>public REST API</b> customers
@@ -152,7 +160,7 @@ export default function Home() {
             <div className="head reveal">
               <div className="label">How I work</div>
               <h2>How I build backends</h2>
-              <p className="sec-intro">3+ years of production taught me these — mostly the hard way.</p>
+              <p className="sec-intro">Production taught me these — mostly the hard way.</p>
             </div>
             <div className="principles">
               {principles.map((pr, i) => (
@@ -202,7 +210,12 @@ export default function Home() {
                 <small>Achievement</small>
                 <div className="big-num">3 of 4</div>
                 <h3>Internal hackathons won at Delta4 · 2025</h3>
-                <p>All three winning projects are now live in production.</p>
+                <ul className="wins">
+                  {hackathonWins.map((w) => (
+                    <li key={w}><Check />{w}</li>
+                  ))}
+                </ul>
+                <p>All three are now live in production.</p>
               </div>
             </div>
           </div>

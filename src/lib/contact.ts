@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 
 // Server-side source of truth for what a valid contact message looks like.
@@ -21,16 +20,3 @@ export const contactSchema = z.object({
 });
 
 export type ContactInput = z.infer<typeof contactSchema>;
-
-/** First client IP as seen by Vercel's edge, or "unknown" in local dev. */
-export function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
-/** We never store raw IPs — only a salted hash, which is enough to rate-limit. */
-export function hashIp(ip: string): string {
-  const salt = process.env.IP_HASH_SALT ?? "";
-  return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
-}

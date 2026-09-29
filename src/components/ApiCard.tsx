@@ -137,7 +137,7 @@ export default function ApiCard() {
           <span className="p">{"// Like every good API, this one tells you\n// exactly what you're getting."}</span>
         )}
       </pre>
-      <div className="api-foot">Send it again — same answer every time. That&apos;s called idempotency.</div>
+      <div className="api-foot">Send it ten times or once — same effect on the server. That&apos;s idempotency.</div>
     </div>
   );
 }
