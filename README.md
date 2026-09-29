@@ -10,7 +10,7 @@ It's a normal portfolio with a small, real backend behind it:
 
 ## Stack
 
-Next.js 16 (App Router, TypeScript) · Supabase (Postgres) · Brevo (transactional email) · Vercel (hosting + cron) · Zod
+Next.js 16 (App Router, TypeScript) · Supabase (Postgres) · Resend (email) · Vercel (hosting + cron) · Zod
 
 ## How the contact form works
 
@@ -20,7 +20,7 @@ browser ──POST /api/contact──▶ Next.js route handler ──rpc──�
                                   │  2. 10 KB body limit                  │  in one transaction
                                   │  3. Zod validation
                                   │  4. honeypot → silent 201
-                                  └─ 5. after save: email via Brevo
+                                  └─ 5. after save: email via Resend
 ```
 
 - **The table is never exposed.** Row Level Security is on with no policies, and all table privileges are revoked.

@@ -1,4 +1,4 @@
-import { notifyNewMessage } from "@/lib/brevo";
+import { notifyNewMessage } from "@/lib/notify";
 import { clientIp, contactSchema, hashIp } from "@/lib/contact";
 import { getSupabase } from "@/lib/supabase";
 
