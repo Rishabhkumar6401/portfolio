@@ -1,14 +1,19 @@
 # Rishabh Kumar — Portfolio
 
-Personal site of a Node.js backend engineer. Live at **https://rishabh-kumar.vercel.app**.
+Personal site of a backend engineer. Live at **https://rishabh-kumar.vercel.app**.
 
-It's a normal portfolio with a small, real backend behind it:
+It is a portfolio plus a set of free developer tools at `/tools`. Two of the tools run on a real backend:
 
-- **`GET /api/rishabh`** — the card on the homepage calls this endpoint and shows the real response and round-trip time.
-- **`POST /api/contact`** — the contact form. Validated, rate-limited, stored in Postgres, and delivered by email.
-- **`POST /api/demo/cache`** — the "Why caching matters" demo. Runs a real report 100 times straight from Postgres,
-  then 100 times through Redis, and streams the measured timings back live.
-- **`GET /api/cron/keepalive`** — a daily job that keeps the free Postgres and Redis databases awake.
+- **Webhook tester** (`/tools/webhook-tester`): gives a temporary URL and shows every request sent to it.
+  `POST /api/hooks` creates a URL, any method on `/h/<id>` stores a request, `GET /api/hooks/<id>` lists them.
+- **Live cache test** (`/tools/cache-test`): `POST /api/demo/cache` runs a real report 100 times straight from
+  Postgres, then 100 times through Redis, and streams the measured timings back.
+- **`GET /api/cron/keepalive`**: a daily job that keeps the free Postgres and Redis databases awake.
+
+The other tools (JSON formatter, JWT decoder, Base64, Unix timestamp, cron explainer) run in the browser only.
+`POST /api/contact` and `GET /api/rishabh` are still in the code but no page uses them at the moment.
+
+A plain-English explanation of the whole backend is in [`public/how-it-works.md`](public/how-it-works.md).
 
 ## Stack
 
@@ -16,6 +21,26 @@ Next.js 16 (App Router, TypeScript) · Supabase (Postgres) · Upstash (Redis) ·
 
 Functions run in Tokyo (`hnd1`, set in `vercel.json`) — the same AWS region as the database and Redis,
 so the demo measures the databases, not the distance to them.
+
+## How the webhook tester works
+
+```
+POST /api/hooks ─────────▶ limits, then HSET hook:<id> {key hash, seq, status} with a 24 h expiry
+ANY  /h/<id>[/path] ─────▶ read at most 16 KB of body ─▶ one Lua script: exists? rate limit? LPUSH, LTRIM 50, EXPIRE
+GET  /api/hooks/<id> ────▶ one Lua script: key hash matches? return only requests newer than ?after=<n>
+```
+
+- **Everything expires by itself.** Each key has a 24-hour TTL, so there is no cleanup job.
+- **One Lua script per operation.** The limit check and the write are a single atomic step. Tested with 100
+  requests at once against a 60-a-minute limit: exactly 60 accepted, 40 rejected.
+- **Write-only URL.** The id in the URL can only add requests. Reading needs a separate view key that stays in the
+  browser. Only its SHA-256 hash is stored.
+- **Limits.** 10 new URLs per visitor per hour and 200 per day site-wide, 60 requests per URL per minute,
+  120 reads per visitor per minute, newest 50 requests kept, bodies cut at 16 KB.
+- **Polling with a cursor.** Serverless functions cannot hold a connection open, so the page polls with the number
+  of the last request it has. It slows down when idle and stops in a background tab.
+- **Signature check in the browser.** GitHub, Stripe and plain HMAC SHA-256 signatures are verified with Web Crypto,
+  so the signing secret never reaches the server.
 
 ## How the contact form works
 
@@ -37,7 +62,7 @@ browser ──POST /api/contact──▶ Next.js route handler ──rpc──�
   so the form can't be abused to send spam to anyone else.
 - **A failed email isn't an error for the visitor.** The message is already saved, and resubmitting would only duplicate it.
 
-## How the caching demo works
+## How the cache test works
 
 ```
 click ──POST /api/demo/cache──▶ gate in Postgres: demo_try_start() ──▶ 429 + Retry-After if not allowed

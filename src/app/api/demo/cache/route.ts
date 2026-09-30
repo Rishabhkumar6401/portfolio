@@ -11,8 +11,8 @@ const RUN_DEADLINE_MS = 20_000;
 // (in the error details) how many seconds until a run is allowed again; retryAfter is the fallback.
 const LIMITS = {
   busy: { retryAfter: 2, message: "Another visitor is running the test right now." },
-  visitor_limit: { retryAfter: 3600, message: "You've had your runs for now — give my free-tier database a breather." },
-  daily_limit: { retryAfter: 3600, message: "The demo has used up today's runs — it lives on free tiers." },
+  visitor_limit: { retryAfter: 3600, message: "You have used your 3 runs for this hour." },
+  daily_limit: { retryAfter: 3600, message: "The test has reached today's limit of 100 runs." },
 } as const;
 
 const error = (status: number, message: string) => Response.json({ ok: false, error: message }, { status });
@@ -20,7 +20,7 @@ const error = (status: number, message: string) => Response.json({ ok: false, er
 // POST /api/demo/cache — gate the run in Postgres, then stream progress and measured results as NDJSON.
 export async function POST(req: Request) {
   if (isCrossSite(req)) return error(403, "Cross-site requests are not allowed.");
-  if (!redisConfigured()) return error(503, "The demo isn't switched on yet.");
+  if (!redisConfigured()) return error(503, "The cache test is not switched on yet.");
 
   const supabase = getSupabase();
 
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
         await runCacheDemo(emit, AbortSignal.any([stop.signal, AbortSignal.timeout(RUN_DEADLINE_MS)]));
       } catch (err) {
         if (!stop.signal.aborted) console.error("[demo] run failed", err instanceof Error ? err.message : err);
-        emit({ type: "error", message: "The test didn't finish — please try again in a minute." });
+        emit({ type: "error", message: "The test did not finish. Please try again in a minute." });
       } finally {
         // Free the "one run at a time" slot for the next visitor.
         const { error: finishError } = await supabase.rpc("demo_finish", { p_run_id: runId });

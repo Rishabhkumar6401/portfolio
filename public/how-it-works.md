@@ -7,13 +7,15 @@ which tools I picked, and why.
 
 ## In 30 seconds
 
-The site looks like a normal portfolio, but three parts of it are real backend features:
+The site is a portfolio with a set of developer tools. Two of the tools are real backend features:
 
 | Feature | What you see | What actually happens |
 |---|---|---|
-| **Live API card** (top of the page) | A request to `/api/rishabh` and its JSON answer | A real HTTP request from your browser to my server. The time shown is measured in your browser. |
-| **Caching demo** ("Why caching matters") | Two progress bars and their timings | My server runs a real database report 200 times — 100 straight from Postgres, 100 through a Redis cache — and streams the measured times back to you. |
-| **Contact form** | "Thanks, your message is in my inbox" | Your message is checked, rate-limited, saved in a database and emailed to me. |
+| **Webhook tester** (`/tools/webhook-tester`) | A temporary URL, and every request sent to it | My server stores each request in Redis for 24 hours. Limits, expiry and access are enforced on the server. |
+| **Live cache test** (`/tools/cache-test`) | A table of measured times | My server runs a real database report 200 times (100 straight from Postgres, 100 through a Redis cache) and streams the measured times back to you. |
+
+The other tools (JSON formatter, JWT decoder, Base64, Unix timestamp, cron) run entirely in the browser. They
+send nothing to the server.
 
 Plus one job you never see: a daily **keep-alive** task, so the free database services never fall asleep.
 
@@ -27,9 +29,8 @@ Everything runs on free plans, and every feature is protected against spam and a
 |---|---|---|---|
 | **Next.js** (React + TypeScript) | Builds the page *and* the API endpoints | One codebase for the front end and the back end | A shop where the showroom and the back office share one building |
 | **Vercel** | Hosts the site and runs the API code | Free, fast, and deploys automatically on every `git push` | The landlord who also keeps the lights on |
-| **Supabase** (PostgreSQL) | Stores contact messages, the demo's 100,000 orders, and the rate-limit records | A real Postgres database on a generous free plan | A filing cabinet in a locked room |
-| **Upstash** (Redis) | The cache in the caching demo | Redis over HTTPS — no server to run, free plan | A sticky note on your monitor |
-| **Resend** | Emails me when someone sends a message | Simple API, free plan, no domain setup needed | The postman |
+| **Supabase** (PostgreSQL) | Stores the cache test's 100,000 orders and its rate-limit records | A real Postgres database on a generous free plan | A filing cabinet in a locked room |
+| **Upstash** (Redis) | Stores the webhook tester's requests, and is the cache in the cache test | Redis over HTTPS — no server to run, free plan | A sticky note on your monitor |
 | **Zod** | Checks every input before the server trusts it | Clear rules and clear error messages | The guard checking IDs at the door |
 
 ### Everything lives in one city: Tokyo
@@ -39,7 +40,7 @@ Everything runs on free plans, and every feature is protected against spam and a
 - Redis is in **Tokyo** too (Google Cloud).
 
 **Why it matters:** if the server sat in the USA and the database in Tokyo, every single question would travel
-across the Pacific and back — roughly 150 ms per trip. The caching demo would then measure *distance*, not
+across the Pacific and back — roughly 150 ms per trip. The cache test would then measure *distance*, not
 *databases*.
 
 I saw this for myself while building it: running the demo from my laptop in India, every call travelled to Tokyo
@@ -54,56 +55,134 @@ On the live site, the server sits next to both databases, so the timings reflect
 Your browser
    │
    │  1. The page itself comes from Vercel's CDN (a copy stored close to you)
-   │  2. Buttons and the form call my API endpoints
+   │  2. The two backend tools call my API endpoints
    ▼
 Vercel functions — Tokyo
-   ├── GET  /api/rishabh          → answers from code, no database
+   ├── POST /api/hooks            → create a test URL (Redis)
+   ├── ANY  /h/<id>               → receive a request on a test URL and store it (Redis)
+   ├── GET  /api/hooks/<id>       → the page asks "anything new?" (Redis)
    ├── POST /api/demo/cache       → Postgres (the report + the limits) and Redis (the cache)
-   ├── POST /api/contact          → Postgres (limits + save), then Resend (email me)
    └── GET  /api/cron/keepalive   → pings Postgres and Redis once a day
 ```
 
 ---
 
-## 1. The live API card
+## 1. The webhook tester
 
-**What happens when you press "Send request":**
+### What a webhook is, with a shop example
 
-1. Your browser sends `GET /api/rishabh` to my server.
-2. The server replies with a small JSON profile: name, role, stack, location.
-3. Your browser measures how long the round trip took and shows it, e.g. `200 OK · 43 ms`.
-4. The answer is typed out on screen.
+You order a parcel. You could phone the courier every ten minutes to ask "is it here yet?", or the courier could
+ring your doorbell when it arrives. A webhook is the doorbell: instead of my server asking Stripe again and
+again whether a payment happened, Stripe sends a request to my server the moment it does.
 
-The card also sends one request by itself the first time it scrolls into view.
+The hard part for a developer is that you cannot see that request. It goes from Stripe's server to yours. The
+webhook tester gives you a temporary address to hand to Stripe (or GitHub, or anything else), and shows you
+exactly what arrived.
 
-**The CDN copy.** The response carries this header:
+### What happens, step by step
 
-```
-Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400
-```
+**Creating a URL** (`POST /api/hooks`)
 
-In plain words: Vercel's CDN may keep a copy of the answer for an hour, so most requests are answered by a
-server near you without running my code at all. After that hour, it can keep handing out the old copy for up to
-a day while it quietly fetches a fresh one. My profile hardly ever changes, so that's perfectly fine.
+1. The server checks the limits: 10 new URLs per visitor per hour, 200 per day for the whole site.
+2. It makes two random values: an **id** (goes in the URL) and a **view key** (goes back to your browser only).
+3. It stores the URL in Redis with a 24-hour expiry. It stores a SHA-256 hash of the view key, not the key.
+4. Your browser keeps the id and the key, so a page reload brings the same URL back.
 
-> Real-world version: a newspaper. It's printed once, and every newsstand hands out copies — nobody reprints
-> the paper for each reader.
+**A request arrives** (any method on `/h/<id>`)
 
-**"Send it ten times or once — same effect on the server."** That line is about **idempotency**. A `GET` only
-reads; it never changes anything. Asking a shopkeeper "what time is it?" ten times changes nothing. Pressing
-**Pay** ten times on a checkout page is different — that must not charge you ten times, which is why payment
-APIs are deliberately built to be idempotent.
+1. The server reads the body, but only the first 16 KB. If the upload is bigger it stops reading.
+2. It builds a record: method, path, query, headers, body, sender IP, time.
+3. One Lua script in Redis then does everything in a single step: check the URL still exists, count the
+   request against the limit (60 a minute), add it to the list, trim the list to the newest 50, and give the
+   list the same expiry as the URL.
+4. The sender gets the reply status you chose (200 by default).
 
-**Anyone can call it.** It's public, read-only data, so it accepts requests from any website
-(`Access-Control-Allow-Origin: *`). Try it from a terminal:
+**The page checks for new requests** (`GET /api/hooks/<id>?after=<n>`)
 
-```bash
-curl https://rishabh-kumar.vercel.app/api/rishabh
-```
+1. The browser sends the view key in a header and the number of the last request it already has.
+2. One Lua script checks the key hash and returns only the requests newer than that number.
+3. The page asks every 2 seconds while things are happening, every 5 seconds after two quiet minutes, not at
+   all while the tab is in the background, and it pauses after 15 quiet minutes.
+
+### Why Redis, and not Postgres
+
+This data is temporary by nature. Every request is wanted for a day at most. Redis can put an expiry on each
+key, so old data deletes itself. With Postgres I would need a scheduled job to delete old rows, and a forgotten
+job means a table that grows forever.
+
+Redis lists also fit the shape of the data: "add to the front, keep the newest 50" is two built-in commands.
+
+### Why a Lua script: the two-requests-at-once problem
+
+Storing a request needs several Redis commands: read the counter, compare it with the limit, add one, save the
+request, trim the list. If my server sent them one by one, two requests arriving together could both read
+"59 of 60 used", both decide they are allowed, and both get in. The limit would leak.
+
+A Lua script runs inside Redis as one uninterrupted step. Nothing else can run in the middle of it. So the
+check and the write can never be separated.
+
+> I tested this: 100 requests sent to one URL, 25 at a time. Exactly 60 were accepted, exactly 40 got
+> "429 Too Many Requests", the counter said 60 and the list held the newest 50.
+
+### Two secrets, not one
+
+Most tools of this kind use one secret: whoever knows the URL can read everything sent to it. But the URL is
+exactly the thing you paste into other companies' dashboards, so it is the secret most likely to leak.
+
+Here the URL can only **add** requests. **Reading** them needs the view key, which never leaves your browser
+except to talk to my API. The server keeps only a hash of it, the same way a password is stored. If someone
+copied my Redis database, they still could not read anyone's requests through the API.
+
+### The limits
+
+| Limit | Value | Why |
+|---|---|---|
+| New URLs per visitor | 10 an hour | Stops one person filling the store |
+| New URLs, whole site | 200 a day | Keeps the worst case inside the free Redis plan |
+| Requests per URL | 60 a minute | A webhook sender in a retry loop cannot flood it |
+| Requests kept per URL | newest 50 | Bounded storage |
+| Body size kept | 16 KB | Bounded storage; larger bodies are cut and marked |
+| Page checks per visitor | 120 a minute | The read API cannot be hammered either |
+| Lifetime | 24 hours | Everything deletes itself |
+
+Visitors are counted by a salted hash of their IP address, so the counters do not hold raw addresses.
+
+### Why the page asks again and again, instead of a live connection
+
+A live connection (WebSocket) needs a server that stays up and holds the connection open. This site runs on
+serverless functions: each one starts, answers, and stops. It cannot hold a connection for minutes.
+
+So the page polls. The cost of polling is wasted requests when nothing is new, which is why the page sends the
+number of the last request it has (the answer is then tiny), slows down when it is quiet, and stops in a
+background tab.
+
+### Checking a signature
+
+Services sign their webhooks: they compute an HMAC of the body with a secret only you and they know, and send
+it in a header. The page can recompute it and tell you whether it matches. This runs in your browser with the
+built-in crypto API, so the signing secret is never sent to my server. It understands the GitHub format
+(`sha256=<hex>`), the Stripe format (`t=<time>,v1=<signature>`, signed over `<time>.<body>`), and a plain hex or
+Base64 HMAC.
+
+For this to work the stored body must be byte-for-byte what was sent. That is why the server stores text as
+text only when it is valid UTF-8, keeps a leading byte-order mark, and stores anything else as Base64.
+
+### Testing retries
+
+You can set the URL to reply 500 or 503. The sender then believes the delivery failed and retries, and you can
+watch its retry schedule. Redirect codes are not offered on purpose: a URL that redirects anywhere could be
+abused to disguise links.
+
+### If someone asks "what would you change at real scale?"
+
+- Use a server that can hold connections (or a push service) and send new requests to the page instantly.
+- Put request bodies in object storage and keep only the index in Redis, so large bodies are possible.
+- Add accounts, so a URL can live longer than a day and belong to a team.
+- Add forwarding to a developer's own machine, so the request can be replayed against local code.
 
 ---
 
-## 2. The caching demo
+## 2. The live cache test
 
 ### The problem caching solves — a shop example
 
@@ -270,40 +349,12 @@ as before?" but can't be turned back into the IP address.
 ### The worst case
 
 A determined attacker could use up the day's 100 runs. The demo then shows a "come back later" countdown until
-the window rolls over. Nothing else is affected: the contact form doesn't use Redis, and everything runs on free
+the window rolls over. The other tools keep working, and everything runs on free
 plans with no card attached, so there's never a surprise bill.
 
 ---
 
-## 4. The contact form
-
-When you press **Send message**, the request passes these checks, in this order:
-
-1. **Same site only.** Requests from other websites' pages are rejected.
-2. **Size limit.** Anything over 10 KB is rejected.
-3. **Validation (Zod).** Name up to 80 characters with no line breaks or `< >`; a valid email address; a message
-   of 10–2,000 characters. The browser runs the same checks for friendly error messages, but only the server's
-   check is trusted.
-4. **Honeypot.** The form has a hidden field that people can't see, but bots fill in. If it's filled, the server
-   says "thanks" and quietly throws the message away.
-   > Real-world version: a fake "staff only" door that only burglars try to open.
-5. **Rate limit and save, in one step.** A database function checks the limits — 3 messages per visitor per
-   10 minutes, 50 per hour for the whole site — and saves the message in the same transaction, so two quick
-   submissions can't both slip past the limit.
-6. **Email me.** Resend delivers the message to my inbox.
-
-**Details that matter:**
-
-- **Email only ever goes to me.** Your address is set as *Reply-To*, never as a recipient — so nobody can use my
-  form to send spam to someone else.
-- **If the email fails, you still see success.** Your message is already saved in the database. Showing an
-  error would only make you send it twice.
-- **No line breaks allowed in the name.** Email headers are separated by line breaks, so a name with hidden line
-  breaks could smuggle in extra headers. The validation rule blocks that.
-
----
-
-## 5. Security, in plain words
+## 4. Security, in plain words
 
 **The database is locked; the website talks to a clerk at a counter.** Every table has Row Level Security
 switched on, with no rules and no permissions — so nobody can read or write a table directly, not even with the
@@ -311,7 +362,6 @@ site's own key. The site can only call a short list of database functions, and e
 
 | Function | Its job |
 |---|---|
-| `submit_contact` | Check the limits and save one message |
 | `ping` | Say "I'm awake" |
 | `demo_top_products` | Run the demo report |
 | `demo_try_start` / `demo_finish` | Open and close a demo run (this is where the limits live) |
@@ -329,7 +379,7 @@ page in a frame, to share only minimal referrer information, and that camera, mi
 
 ---
 
-## 6. Keeping the free services awake
+## 5. Keeping the free services awake
 
 Free plans go to sleep when nobody uses them: Supabase pauses a project after 7 days without activity, and
 Upstash archives a free Redis database after 30 days.
@@ -339,20 +389,19 @@ secret password in its request, so nobody else can trigger it.
 
 ---
 
-## 7. What it costs: nothing
+## 6. What it costs: nothing
 
 | Service | Free plan | This site's use |
 |---|---|---|
 | **Vercel** (Hobby) | 1 million function calls a month | Low — the page itself is a static file |
 | **Supabase** | 500 MB database | About 9 MB (mostly the demo's 100,000 orders) |
-| **Upstash Redis** | 500,000 commands a month | At most about 306,000, capped by the daily limit |
-| **Resend** | 100 emails a day, 3,000 a month | One per contact message |
+| **Upstash Redis** | 500,000 commands a month | Cache test: at most about 306,000, capped by its daily limit. Webhook tester: one command per stored request and per page check, capped by its own limits |
 
 On free plans with no card attached, going over a limit pauses that one feature — it never creates a bill.
 
 ---
 
-## 8. Questions I'm often asked
+## 7. Questions I'm often asked
 
 **Are the demo's numbers measured live?**
 Yes. Open DevTools → Network, press the button, and you'll see the `cache` request streaming results line by
@@ -388,22 +437,26 @@ created.
   is cheap.
 - Clear the cache when orders change (event-based invalidation), instead of only waiting for it to expire.
 - Monitor the cache hit rate, p95 latency and error rate, with alerts.
-- Send emails from a queue with retries, so a slow email provider never slows down the form.
 - Use a Redis plan sized for the traffic, and move the rate limiter there, where it's fastest.
 
 ---
 
-## 9. Where things live in the code
+## 8. Where things live in the code
 
 | What | File |
 |---|---|
 | All page text and profile data | `src/content/profile.ts` |
-| API card endpoint | `src/app/api/rishabh/route.ts` |
-| Caching demo endpoint (gate + streaming) | `src/app/api/demo/cache/route.ts` |
-| Demo logic (the two rounds, cache-aside, coalescing, stats) | `src/lib/cacheDemo.ts` |
+| Names and page text of the tools | `src/content/tools.ts` |
+| Webhook tester: storage, limits and the Lua scripts | `src/lib/hooks.ts` |
+| Webhook tester: create a URL | `src/app/api/hooks/route.ts` |
+| Webhook tester: read, change reply status, delete | `src/app/api/hooks/[id]/route.ts` |
+| Webhook tester: receive a request | `src/app/h/[id]/[[...path]]/route.ts` |
+| Webhook tester: the page | `src/components/tools/WebhookTester.tsx` |
+| Cache test endpoint (gate + streaming) | `src/app/api/demo/cache/route.ts` |
+| Cache test logic (the two rounds, cache-aside, coalescing, stats) | `src/lib/cacheDemo.ts` |
+| Cache test: the page | `src/components/tools/CacheTest.tsx` |
+| Browser-only tools | `src/components/tools/`, `src/lib/cron.ts`, `src/lib/json.ts` |
 | Redis client | `src/lib/redis.ts` |
-| Contact form endpoint | `src/app/api/contact/route.ts` |
-| Email sending | `src/lib/notify.ts` |
 | Daily keep-alive | `src/app/api/cron/keepalive/route.ts` |
 | Database tables, functions and limits | `supabase/migrations/` |
 | Server region and daily schedule | `vercel.json` |
